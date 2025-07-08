@@ -10,6 +10,15 @@
         <version>1.0.0-SNAPSHOT</version>
     </parent>
 
+    <groupId>com.ebaProduct</groupId>
     <artifactId>eba-plat</artifactId>
+    <version>1.0-SNAPSHOT</version>
+
+    <packaging>pom</packaging>
+    <name>eba-plat</name>
+
+    <modules>
+
+    </modules>
 
 </project>

@@ -5,17 +5,17 @@
     <modelVersion>4.0.0</modelVersion>
 
     <parent>
-        <groupId>com.ebaProduct</groupId>
-        <artifactId>EBAProduct</artifactId>
+        <groupId>com.qctv1</groupId>
+        <artifactId>qctv1-product</artifactId>
         <version>1.0.0-SNAPSHOT</version>
     </parent>
 
-    <groupId>com.ebaProduct</groupId>
-    <artifactId>eba-plat</artifactId>
+    <groupId>com.qctv1</groupId>
+    <artifactId>qctv1-plat</artifactId>
     <version>1.0-SNAPSHOT</version>
 
     <packaging>pom</packaging>
-    <name>eba-plat</name>
+    <name>qctv1-plat</name>
 
     <modules>
 

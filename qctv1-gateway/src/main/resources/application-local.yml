@@ -1,0 +1,14 @@
+spring:
+  cloud:
+    nacos:
+      config:
+        enabled: false
+      discovery:
+        enabled: false
+
+qctv1:
+  gateway:
+    routes:
+      # 本地联调时，网关直接转发到已经启动好的后端端口。
+      chat-uri: http://localhost:10082
+      rag-uri: http://localhost:10081

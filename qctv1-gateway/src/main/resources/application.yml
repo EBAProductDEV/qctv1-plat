@@ -1,0 +1,88 @@
+server:
+  port: 10080
+
+spring:
+  application:
+    name: qctv1-gateway
+  main:
+    web-application-type: reactive
+  profiles:
+    # 默认走 local 模式，优先保证本地启动不依赖 Nacos，
+    # 同时把请求直接转发到本机服务端口。
+    default: local
+  cloud:
+    gateway:
+      server:
+        webflux:
+          httpclient:
+            connect-timeout: 10000
+            response-timeout: 180s
+          discovery:
+            locator:
+              enabled: false
+
+management:
+  endpoint:
+    gateway:
+      access: read-only
+    health:
+      show-details: always
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,gateway
+
+resilience4j:
+  circuitbreaker:
+    instances:
+      chat-api:
+        sliding-window-size: 20
+        failure-rate-threshold: 50
+      image-api:
+        sliding-window-size: 20
+        failure-rate-threshold: 50
+      hello-api:
+        sliding-window-size: 20
+        failure-rate-threshold: 50
+      agent-api:
+        sliding-window-size: 20
+        failure-rate-threshold: 50
+      code-api:
+        sliding-window-size: 20
+        failure-rate-threshold: 50
+
+qctv1:
+  gateway:
+    routes:
+      # 这是 nacos 模式下的基础目标地址。
+      # local 模式会在 application-local.yml 中覆盖成固定 HTTP 地址。
+      chat-uri: lb://qctv1-ai-chat
+      rag-uri: lb://qctv1-ai-rag
+      connect-timeout-ms: 10000
+      response-timeout-ms: 180000
+      retry-enabled: true
+      retry-count: 2
+      circuit-breaker-enabled: true
+    auth:
+      # 当前先把鉴权骨架搭好，默认关闭，后续可直接接入真实认证体系。
+      enabled: false
+      whitelist:
+        - /actuator/**
+        - /api/ai/chat/stream
+        - /api/ai/agent/chat
+    cors:
+      allowed-origin-patterns:
+        - http://localhost:*
+        - http://127.0.0.1:*
+        - https://localhost:*
+        - https://127.0.0.1:*
+      allowed-methods:
+        - GET
+        - POST
+        - PUT
+        - DELETE
+        - OPTIONS
+      allowed-headers:
+        - "*"
+      exposed-headers:
+        - X-Request-Id

@@ -1,0 +1,28 @@
+spring:
+  config:
+    import:
+      # 先加载网关自己的 Nacos 配置，再加载可选的公共共享配置。
+      - optional:nacos:qctv1-gateway.yaml?refreshEnabled=true
+      - optional:nacos:qctv1-common.yaml?refreshEnabled=true
+  cloud:
+    loadbalancer:
+      nacos:
+        enabled: true
+    nacos:
+      # 连接参数全部走环境变量，便于同一份产物在本地、测试、服务器之间复用。
+      server-addr: ${NACOS_SERVER_ADDR:127.0.0.1:8848}
+      username: ${NACOS_USERNAME:nacos}
+      password: ${NACOS_PASSWORD:nacos}
+      discovery:
+        namespace: ${NACOS_NAMESPACE:}
+        group: ${NACOS_GROUP:DEFAULT_GROUP}
+        service: ${spring.application.name}
+        health-indicator:
+          enabled: true
+      config:
+        namespace: ${NACOS_NAMESPACE:}
+        group: ${NACOS_GROUP:DEFAULT_GROUP}
+        file-extension: yaml
+        refresh-enabled: true
+        health-indicator:
+          enabled: true

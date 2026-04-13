@@ -13,9 +13,9 @@ spring:
       password: ${QCTV1_REDIS_PASSWORD:}
       database: ${QCTV1_REDIS_DATABASE:0}
   profiles:
-    # 默认走 local 模式，优先保证本地启动不依赖 Nacos，
-    # 同时把请求直接转发到本机服务端口。
-    default: local
+    # 默认走 nacos 模式，便于本地和联调环境统一使用注册发现。
+    # 如需本机直连调试，可显式切回 local profile。
+    default: nacos
   cloud:
     gateway:
       server:
@@ -60,7 +60,7 @@ resilience4j:
 qctv1:
   gateway:
     routes:
-      # 这是 nacos 模式下的基础目标地址。
+      # 默认按服务名走 Nacos 注册发现。
       # local 模式会在 application-local.yml 中覆盖成固定 HTTP 地址。
       chat-uri: lb://qctv1-ai-chat
       rag-uri: lb://qctv1-ai-rag

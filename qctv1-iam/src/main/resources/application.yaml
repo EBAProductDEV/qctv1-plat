@@ -10,7 +10,7 @@ spring:
   application:
     name: qctv1-iam
   profiles:
-    default: local
+    default: nacos
   datasource:
     url: jdbc:mysql://${QCTV1_DB_MYSQL_HOST:localhost}:${QCTV1_DB_MYSQL_PORT:3306}/qctv1-dev?useSSL=false&serverTimezone=UTC&characterEncoding=utf8
     username: ${QCTV1_DB_MYSQL_USER:root}

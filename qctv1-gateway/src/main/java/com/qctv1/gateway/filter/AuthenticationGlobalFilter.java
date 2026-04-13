@@ -3,6 +3,8 @@ package com.qctv1.gateway.filter;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.qctv1.gateway.config.Qctv1GatewayProperties;
+import com.qctv1.gateway.security.GatewayHeaders;
+import com.qctv1.gateway.security.TokenPrincipal;
 import com.qctv1.gateway.security.TokenValidator;
 import org.springframework.cloud.gateway.filter.GatewayFilterChain;
 import org.springframework.cloud.gateway.filter.GlobalFilter;
@@ -22,8 +24,11 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 
 /**
- * 鉴权全局过滤器。
- * 当前版本只搭骨架：支持开关、白名单和统一错误返回，真正的 token 校验逻辑留给 TokenValidator 扩展。
+ * 网关统一认证过滤器。
+ * 负责三件事：
+ * 1. 放行白名单接口。
+ * 2. 校验 Authorization 中的 JWT 是否有效。
+ * 3. 把当前登录用户信息透传给下游服务。
  */
 @Component
 public class AuthenticationGlobalFilter implements GlobalFilter, Ordered {
@@ -48,14 +53,13 @@ public class AuthenticationGlobalFilter implements GlobalFilter, Ordered {
 
     @Override
     public Mono<Void> filter(ServerWebExchange exchange, GatewayFilterChain chain) {
-        // 整个鉴权骨架都可以通过配置关闭。
-        // 这样在真实身份体系还没接入前，网关也能先承担路由转发职责。
+        // 如果关掉鉴权开关，网关只做普通转发。
         if (!properties.getAuth().isEnabled()) {
             return chain.filter(exchange);
         }
 
         String path = exchange.getRequest().getPath().value();
-        // 白名单优先于 token 解析，这样流式接口和健康检查在开启鉴权后仍可按需放行。
+        // 白名单接口不需要携带 token，例如登录、注册、刷新 token。
         if (properties.getAuth().getWhitelist().stream().anyMatch(pattern -> pathMatcher.match(pattern, path))) {
             return chain.filter(exchange);
         }
@@ -70,16 +74,24 @@ public class AuthenticationGlobalFilter implements GlobalFilter, Ordered {
             return writeJsonError(exchange, HttpStatus.UNAUTHORIZED, "Authorization header is empty");
         }
 
-        // token 校验通过接口抽象出去，当前先用属性配置做占位，
-        // 后面可以无缝替换成 JWT、OAuth2 或远程鉴权实现。
+        // validate 通过后把用户标识写入请求头，后端服务不再自行解析 JWT。
         return tokenValidator.validate(token, exchange)
-                .flatMap(valid -> valid
-                        ? chain.filter(exchange)
-                        : writeJsonError(exchange, HttpStatus.FORBIDDEN, "Token validation failed"));
+                .flatMap(principal -> chain.filter(mutateExchange(exchange, principal)))
+                .switchIfEmpty(writeJsonError(exchange, HttpStatus.FORBIDDEN, "Token validation failed"));
+    }
+
+    private ServerWebExchange mutateExchange(ServerWebExchange exchange, TokenPrincipal principal) {
+        // 透传的请求头是 IAM 与其他下游服务共享的“当前用户上下文”。
+        return exchange.mutate()
+                .request(builder -> builder
+                        .header(GatewayHeaders.USER_ID, String.valueOf(principal.userId()))
+                        .header(GatewayHeaders.USER_NAME, principal.userName())
+                        .header(GatewayHeaders.USER_ROLE, principal.roleCode()))
+                .build();
     }
 
     private String normalizeToken(String authorization) {
-        // 同时兼容原始 token 和标准 Bearer 写法，减少前后端联调阻力。
+        // 兼容标准 Bearer token 和直接传裸 token 两种格式。
         if (authorization.regionMatches(true, 0, "Bearer ", 0, 7)) {
             return authorization.substring(7).trim();
         }
@@ -87,11 +99,11 @@ public class AuthenticationGlobalFilter implements GlobalFilter, Ordered {
     }
 
     private Mono<Void> writeJsonError(ServerWebExchange exchange, HttpStatus status, String message) {
+        // 鉴权失败统一返回 JSON，前端可以稳定地按 message 展示错误原因。
         ServerHttpResponse response = exchange.getResponse();
         response.setStatusCode(status);
         response.getHeaders().setContentType(MediaType.APPLICATION_JSON);
 
-        // 在网关边界统一错误响应结构，前端不需要区分具体是哪个鉴权分支失败。
         Map<String, Object> body = new LinkedHashMap<>();
         body.put("timestamp", OffsetDateTime.now().toString());
         body.put("status", status.value());
@@ -104,7 +116,6 @@ public class AuthenticationGlobalFilter implements GlobalFilter, Ordered {
         try {
             payload = objectMapper.writeValueAsBytes(body);
         } catch (JsonProcessingException ex) {
-            // 即使序列化异常，也退回到最小可用 JSON，避免前端拿到无法解析的响应体。
             payload = "{\"status\":500,\"error\":\"Internal Server Error\"}".getBytes(StandardCharsets.UTF_8);
         }
         return response.writeWith(Mono.just(response.bufferFactory().wrap(payload)));

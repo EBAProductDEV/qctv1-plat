@@ -9,5 +9,5 @@ import reactor.core.publisher.Mono;
  */
 public interface TokenValidator {
 
-    Mono<Boolean> validate(String token, ServerWebExchange exchange);
+    Mono<TokenPrincipal> validate(String token, ServerWebExchange exchange);
 }

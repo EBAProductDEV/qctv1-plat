@@ -6,6 +6,12 @@ spring:
     name: qctv1-gateway
   main:
     web-application-type: reactive
+  data:
+    redis:
+      host: ${QCTV1_REDIS_HOST:localhost}
+      port: ${QCTV1_REDIS_PORT:6379}
+      password: ${QCTV1_REDIS_PASSWORD:}
+      database: ${QCTV1_REDIS_DATABASE:0}
   profiles:
     # 默认走 local 模式，优先保证本地启动不依赖 Nacos，
     # 同时把请求直接转发到本机服务端口。
@@ -58,16 +64,21 @@ qctv1:
       # local 模式会在 application-local.yml 中覆盖成固定 HTTP 地址。
       chat-uri: lb://qctv1-ai-chat
       rag-uri: lb://qctv1-ai-rag
+      iam-uri: lb://qctv1-iam
       connect-timeout-ms: 10000
       response-timeout-ms: 180000
       retry-enabled: true
       retry-count: 2
       circuit-breaker-enabled: true
     auth:
-      # 当前先把鉴权骨架搭好，默认关闭，后续可直接接入真实认证体系。
-      enabled: false
+      enabled: true
+      jwt-secret: ${QCTV1_JWT_SECRET:Qctv1JwtSecretKeyForDevOnlyPleaseChange1234567890}
+      issuer: qctv1-iam
       whitelist:
         - /actuator/**
+        - /api/iam/auth/login
+        - /api/iam/auth/register
+        - /api/iam/auth/refresh
         - /api/ai/chat/stream
         - /api/ai/agent/chat
     cors:

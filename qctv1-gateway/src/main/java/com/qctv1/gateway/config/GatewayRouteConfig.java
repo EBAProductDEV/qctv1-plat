@@ -11,9 +11,8 @@ import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
 
 /**
- * 统一定义网关对外公开的 AI 路由。
- * 当前采用 Java DSL 显式声明，而不是开启 discovery locator 自动生成路由，
- * 这样可以精确控制路径映射、SSE 特殊处理以及普通接口的治理策略。
+ * 网关路由配置。
+ * 这里统一定义前端访问路径与下游服务真实路径的映射关系。
  */
 @Configuration
 public class GatewayRouteConfig {
@@ -21,17 +20,22 @@ public class GatewayRouteConfig {
     @Bean
     public RouteLocator qctv1RouteLocator(RouteLocatorBuilder builder, Qctv1GatewayProperties properties) {
         return builder.routes()
-                // 流式聊天路由必须放在普通聊天路由前面。
-                // 因为 /api/ai/chat/stream 同时也满足 /api/ai/chat/**，
-                // 如果顺序放反，SSE 请求会误走普通接口的过滤链。
+                .route("iam-api", route -> route
+                        .path("/api/iam/**")
+                        // IAM 认证接口不走熔断/重试，避免登录、注册被 1 秒超时或错误重试干扰。
+                        .filters(filter -> passthroughFilters(filter)
+                                .rewritePath("/api/iam/?(?<segment>.*)", "/${segment}"))
+                        .metadata(RouteMetadataUtils.CONNECT_TIMEOUT_ATTR, properties.getRoutes().getConnectTimeoutMs())
+                        .metadata(RouteMetadataUtils.RESPONSE_TIMEOUT_ATTR, properties.getRoutes().getResponseTimeoutMs())
+                        .uri(properties.getRoutes().getIamUri().toString()))
                 .route("ai-chat-stream", route -> route
                         .path("/api/ai/chat/stream")
+                        // SSE 流接口只做最轻量的头处理，避免重试/熔断打断流式输出。
                         .filters(filter -> sseFilters(filter)
                                 .rewritePath("/api/ai/chat/(?<segment>.*)", "/chat/${segment}"))
                         .metadata(RouteMetadataUtils.CONNECT_TIMEOUT_ATTR, properties.getRoutes().getConnectTimeoutMs())
                         .metadata(RouteMetadataUtils.RESPONSE_TIMEOUT_ATTR, properties.getRoutes().getResponseTimeoutMs())
                         .uri(properties.getRoutes().getChatUri().toString()))
-                // 对外统一暴露 /api/ai/chat/**，进入网关后再翻译成 chat 服务现有的 /chat/**。
                 .route("ai-chat-api", route -> route
                         .path("/api/ai/chat/**")
                         .filters(filter -> standardFilters(filter, properties, "chat-api")
@@ -39,7 +43,6 @@ public class GatewayRouteConfig {
                         .metadata(RouteMetadataUtils.CONNECT_TIMEOUT_ATTR, properties.getRoutes().getConnectTimeoutMs())
                         .metadata(RouteMetadataUtils.RESPONSE_TIMEOUT_ATTR, properties.getRoutes().getResponseTimeoutMs())
                         .uri(properties.getRoutes().getChatUri().toString()))
-                // 图片能力目前仍在 chat 服务内，对外保持统一命名空间更方便前端记忆和调用。
                 .route("ai-image-api", route -> route
                         .path("/api/ai/image/**")
                         .filters(filter -> standardFilters(filter, properties, "image-api")
@@ -47,7 +50,6 @@ public class GatewayRouteConfig {
                         .metadata(RouteMetadataUtils.CONNECT_TIMEOUT_ATTR, properties.getRoutes().getConnectTimeoutMs())
                         .metadata(RouteMetadataUtils.RESPONSE_TIMEOUT_ATTR, properties.getRoutes().getResponseTimeoutMs())
                         .uri(properties.getRoutes().getChatUri().toString()))
-                // hello/demo 接口同样挂在统一 AI 前缀下，对下游仍保持 /hello/** 的原始控制器路径。
                 .route("ai-hello-api", route -> route
                         .path("/api/ai/hello/**")
                         .filters(filter -> standardFilters(filter, properties, "hello-api")
@@ -55,8 +57,6 @@ public class GatewayRouteConfig {
                         .metadata(RouteMetadataUtils.CONNECT_TIMEOUT_ATTR, properties.getRoutes().getConnectTimeoutMs())
                         .metadata(RouteMetadataUtils.RESPONSE_TIMEOUT_ATTR, properties.getRoutes().getResponseTimeoutMs())
                         .uri(properties.getRoutes().getChatUri().toString()))
-                // agent 聊天是流式接口，因此单独拆路由，只走 SSE 安全过滤链，
-                // 避免被普通接口的重试和熔断策略干扰。
                 .route("ai-agent-stream", route -> route
                         .path("/api/ai/agent/chat")
                         .filters(filter -> sseFilters(filter)
@@ -64,7 +64,6 @@ public class GatewayRouteConfig {
                         .metadata(RouteMetadataUtils.CONNECT_TIMEOUT_ATTR, properties.getRoutes().getConnectTimeoutMs())
                         .metadata(RouteMetadataUtils.RESPONSE_TIMEOUT_ATTR, properties.getRoutes().getResponseTimeoutMs())
                         .uri(properties.getRoutes().getRagUri().toString()))
-                // 对外 /api/ai/agent/** 统一映射到 rag 服务现有的 /ai/agent/** 控制器结构。
                 .route("ai-agent-api", route -> route
                         .path("/api/ai/agent/**")
                         .filters(filter -> standardFilters(filter, properties, "agent-api")
@@ -72,7 +71,6 @@ public class GatewayRouteConfig {
                         .metadata(RouteMetadataUtils.CONNECT_TIMEOUT_ATTR, properties.getRoutes().getConnectTimeoutMs())
                         .metadata(RouteMetadataUtils.RESPONSE_TIMEOUT_ATTR, properties.getRoutes().getResponseTimeoutMs())
                         .uri(properties.getRoutes().getRagUri().toString()))
-                // 代码检索和代码片段相关接口都落在 rag 服务中。
                 .route("ai-code-api", route -> route
                         .path("/api/ai/code/**")
                         .filters(filter -> standardFilters(filter, properties, "code-api")
@@ -88,21 +86,19 @@ public class GatewayRouteConfig {
             Qctv1GatewayProperties properties,
             String circuitBreakerName
     ) {
-        // 网关和下游服务都可能补充 CORS 响应头，这里先做一次去重，
-        // 避免浏览器收到重复值后出现跨域异常。
+        // 去重响应头，避免 CORS 头在网关和下游重复写入时产生冲突。
         filter.dedupeResponseHeader(
                 "Access-Control-Allow-Credentials Access-Control-Allow-Origin",
                 DedupeResponseHeaderGatewayFilterFactory.Strategy.RETAIN_UNIQUE.name()
         );
 
+        // 普通 AI 接口允许走熔断，防止下游异常时拖垮网关。
         if (properties.getRoutes().isCircuitBreakerEnabled()) {
-            // 熔断器按路由维度生效，避免某个下游接口持续异常时反复占用网关资源。
             filter.circuitBreaker(config -> config.setName(circuitBreakerName));
         }
 
+        // 这里只给 GET 请求做重试，避免对 POST/PUT 这类有副作用的请求重复提交。
         if (properties.getRoutes().isRetryEnabled()) {
-            // 重试只对 GET 请求开放，并且只针对典型网关类状态码，
-            // 这样可以降低误重放非幂等请求的风险。
             filter.retry(config -> config
                     .setRetries(properties.getRoutes().getRetryCount())
                     .setMethods(HttpMethod.GET)
@@ -117,8 +113,14 @@ public class GatewayRouteConfig {
     }
 
     private GatewayFilterSpec sseFilters(GatewayFilterSpec filter) {
-        // SSE 响应需要保持最小过滤链，尤其不能重试，
-        // 否则可能造成流重复、顺序错乱或者连接被中断。
+        return filter.dedupeResponseHeader(
+                "Access-Control-Allow-Credentials Access-Control-Allow-Origin",
+                DedupeResponseHeaderGatewayFilterFactory.Strategy.RETAIN_UNIQUE.name()
+        );
+    }
+
+    private GatewayFilterSpec passthroughFilters(GatewayFilterSpec filter) {
+        // 直通场景只保留必要的响应头去重，不叠加任何保护性策略。
         return filter.dedupeResponseHeader(
                 "Access-Control-Allow-Credentials Access-Control-Allow-Origin",
                 DedupeResponseHeaderGatewayFilterFactory.Strategy.RETAIN_UNIQUE.name()

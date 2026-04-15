@@ -14,6 +14,10 @@ public final class RequestUserContext {
         String userId = request.getHeader(IamHeaders.USER_ID);
         String userName = request.getHeader(IamHeaders.USER_NAME);
         String roleCode = request.getHeader(IamHeaders.USER_ROLE);
+        return requireCurrentUser(userId, userName, roleCode);
+    }
+
+    public static CurrentUser requireCurrentUser(String userId, String userName, String roleCode) {
         if (!StringUtils.hasText(userId) || !StringUtils.hasText(userName) || !StringUtils.hasText(roleCode)) {
             throw new BusinessException(401, "Login required");
         }
@@ -21,7 +25,14 @@ public final class RequestUserContext {
     }
 
     public static void requireAdmin(HttpServletRequest request) {
-        CurrentUser currentUser = requireCurrentUser(request);
+        String userId = request.getHeader(IamHeaders.USER_ID);
+        String userName = request.getHeader(IamHeaders.USER_NAME);
+        String roleCode = request.getHeader(IamHeaders.USER_ROLE);
+        requireAdmin(userId, userName, roleCode);
+    }
+
+    public static void requireAdmin(String userId, String userName, String roleCode) {
+        CurrentUser currentUser = requireCurrentUser(userId, userName, roleCode);
         if (!currentUser.isAdmin()) {
             throw new BusinessException(403, "Admin permission required");
         }

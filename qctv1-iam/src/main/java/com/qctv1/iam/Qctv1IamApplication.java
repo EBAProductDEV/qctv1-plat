@@ -7,7 +7,7 @@ import org.springframework.cloud.client.discovery.EnableDiscoveryClient;
 
 @SpringBootApplication
 @EnableDiscoveryClient
-@MapperScan("com.qctv1.iam")
+@MapperScan("com.qctv1.iam.user.mapper")
 public class Qctv1IamApplication {
 
     public static void main(String[] args) {

@@ -2,12 +2,16 @@ package com.qctv1.iam.user.controller;
 
 import com.qctv1.iam.auth.service.AuthService;
 import com.qctv1.iam.auth.vo.UserProfileVo;
+import com.qctv1.iam.common.BusinessException;
 import com.qctv1.iam.common.InternalApiExceptionHandler;
-import com.qctv1.iam.user.mapper.BaseUserMapper;
 import com.qctv1.iam.user.service.UserAdminService;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
+import org.springframework.boot.test.system.CapturedOutput;
+import org.springframework.boot.test.system.OutputCaptureExtension;
 import org.springframework.context.annotation.Import;
 import org.springframework.http.MediaType;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
@@ -21,6 +25,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+@ExtendWith(OutputCaptureExtension.class)
 @WebMvcTest(
         controllers = InternalUserController.class,
         properties = "spring.profiles.active=local"
@@ -36,9 +41,6 @@ class InternalUserControllerTests {
 
     @MockitoBean
     private UserAdminService userAdminService;
-
-    @MockitoBean
-    private BaseUserMapper baseUserMapper;
 
     @Test
     void getCurrentProfileWithoutHeadersReturnsUnauthorized() throws Exception {
@@ -83,5 +85,38 @@ class InternalUserControllerTests {
                         .header("X-User-Role", "USER"))
                 .andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.message").value("Admin permission required"));
+    }
+
+    @Test
+    void getUserByIdUnexpectedExceptionReturnsGenericMessageAndLogsStacktrace(CapturedOutput output) throws Exception {
+        when(authService.getEnabledUserById(1L)).thenThrow(new RuntimeException("Data too long for column 'login_ip'"));
+
+        mockMvc.perform(get("/internal/users/1")
+                        .header("X-Request-Id", "req-internal-500")
+                        .header("X-User-Id", "1")
+                        .header("X-User-Name", "alice")
+                        .header("X-User-Role", "ADMIN"))
+                .andExpect(status().isInternalServerError())
+                .andExpect(jsonPath("$.message").value("Internal server error"));
+
+        org.assertj.core.api.Assertions.assertThat(output.getOut())
+                .contains("iam internal unexpected exception requestId=req-internal-500 method=GET path=/internal/users/1")
+                .contains("Data too long for column 'login_ip'");
+    }
+
+    @Test
+    void getUserByIdBusinessExceptionKeepsBusinessMessage() throws Exception {
+        when(authService.getEnabledUserById(1L)).thenThrow(new BusinessException(404, "User not found"));
+
+        mockMvc.perform(get("/internal/users/1")
+                        .header("X-User-Id", "1")
+                        .header("X-User-Name", "alice")
+                        .header("X-User-Role", "ADMIN"))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.message").value("User not found"));
+    }
+
+    @SpringBootApplication
+    static class TestApplication {
     }
 }

@@ -12,7 +12,7 @@ spring:
   profiles:
     default: nacos
   datasource:
-    url: jdbc:mysql://${QCTV1_DB_MYSQL_HOST:localhost}:${QCTV1_DB_MYSQL_PORT:3306}/qctv1-dev?useSSL=false&serverTimezone=UTC&characterEncoding=utf8
+    url: jdbc:mysql://${QCTV1_DB_MYSQL_HOST:localhost}:${QCTV1_DB_MYSQL_PORT:3306}/qctv1-dev?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC&characterEncoding=utf8
     username: ${QCTV1_DB_MYSQL_USER:root}
     password: ${QCTV1_DB_MYSQL_PASSWORD:123456}
     driver-class-name: com.mysql.cj.jdbc.Driver

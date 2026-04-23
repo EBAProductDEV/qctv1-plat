@@ -56,6 +56,23 @@ resilience4j:
       code-api:
         sliding-window-size: 20
         failure-rate-threshold: 50
+  timelimiter:
+    instances:
+      chat-api:
+        timeout-duration: 180s
+        cancel-running-future: true
+      image-api:
+        timeout-duration: 180s
+        cancel-running-future: true
+      hello-api:
+        timeout-duration: 180s
+        cancel-running-future: true
+      agent-api:
+        timeout-duration: 180s
+        cancel-running-future: true
+      code-api:
+        timeout-duration: 180s
+        cancel-running-future: true
 
 qctv1:
   gateway:

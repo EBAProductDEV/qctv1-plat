@@ -12,4 +12,6 @@ qctv1:
       # 本地联调时，网关直接转发到已经启动好的后端端口。
       chat-uri: http://localhost:10082
       rag-uri: http://localhost:10081
+      # 10083 是 qctv1-iam，本地短剧服务使用 10084，避免端口冲突。
+      drama-uri: http://localhost:10084
       iam-uri: http://localhost:10083

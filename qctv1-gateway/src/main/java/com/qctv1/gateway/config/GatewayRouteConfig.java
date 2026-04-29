@@ -12,7 +12,9 @@ import org.springframework.http.HttpStatus;
 
 /**
  * 网关路由配置。
- * 这里统一定义前端访问路径与下游服务真实路径的映射关系。
+ *
+ * 前端只访问统一入口，例如 /api/ai/drama/series。
+ * 网关在这里根据 Path 谓词命中对应路由，然后通过 RewritePath 把公网路径改成下游服务真实路径。
  */
 @Configuration
 public class GatewayRouteConfig {
@@ -22,7 +24,6 @@ public class GatewayRouteConfig {
         return builder.routes()
                 .route("iam-api", route -> route
                         .path("/api/iam/**")
-                        // IAM 认证接口不走熔断/重试，避免登录、注册被 1 秒超时或错误重试干扰。
                         .filters(filter -> passthroughFilters(filter)
                                 .rewritePath("/api/iam/?(?<segment>.*)", "/${segment}"))
                         .metadata(RouteMetadataUtils.CONNECT_TIMEOUT_ATTR, properties.getRoutes().getConnectTimeoutMs())
@@ -30,7 +31,6 @@ public class GatewayRouteConfig {
                         .uri(properties.getRoutes().getIamUri().toString()))
                 .route("ai-chat-stream", route -> route
                         .path("/api/ai/chat/stream")
-                        // SSE 流接口只做最轻量的头处理，避免重试/熔断打断流式输出。
                         .filters(filter -> sseFilters(filter)
                                 .rewritePath("/api/ai/chat/(?<segment>.*)", "/chat/${segment}"))
                         .metadata(RouteMetadataUtils.CONNECT_TIMEOUT_ATTR, properties.getRoutes().getConnectTimeoutMs())
@@ -57,6 +57,13 @@ public class GatewayRouteConfig {
                         .metadata(RouteMetadataUtils.CONNECT_TIMEOUT_ATTR, properties.getRoutes().getConnectTimeoutMs())
                         .metadata(RouteMetadataUtils.RESPONSE_TIMEOUT_ATTR, properties.getRoutes().getResponseTimeoutMs())
                         .uri(properties.getRoutes().getChatUri().toString()))
+                .route("ai-drama-api", route -> route
+                        .path("/api/ai/drama/**")
+                        .filters(filter -> standardFilters(filter, properties, "drama-api")
+                                .rewritePath("/api/ai/drama/?(?<segment>.*)", "/drama/${segment}"))
+                        .metadata(RouteMetadataUtils.CONNECT_TIMEOUT_ATTR, properties.getRoutes().getConnectTimeoutMs())
+                        .metadata(RouteMetadataUtils.RESPONSE_TIMEOUT_ATTR, properties.getRoutes().getResponseTimeoutMs())
+                        .uri(properties.getRoutes().getDramaUri().toString()))
                 .route("ai-agent-stream", route -> route
                         .path("/api/ai/agent/chat")
                         .filters(filter -> sseFilters(filter)
@@ -86,18 +93,18 @@ public class GatewayRouteConfig {
             Qctv1GatewayProperties properties,
             String circuitBreakerName
     ) {
-        // 去重响应头，避免 CORS 头在网关和下游重复写入时产生冲突。
+        // 去重响应头，避免网关和下游服务都写 CORS 响应头时浏览器判定跨域失败。
         filter.dedupeResponseHeader(
                 "Access-Control-Allow-Credentials Access-Control-Allow-Origin",
                 DedupeResponseHeaderGatewayFilterFactory.Strategy.RETAIN_UNIQUE.name()
         );
 
-        // 普通 AI 接口允许走熔断，防止下游异常时拖垮网关。
+        // 普通 API 允许熔断，防止下游长时间异常时拖垮网关线程和连接池。
         if (properties.getRoutes().isCircuitBreakerEnabled()) {
             filter.circuitBreaker(config -> config.setName(circuitBreakerName));
         }
 
-        // 这里只给 GET 请求做重试，避免对 POST/PUT 这类有副作用的请求重复提交。
+        // 只对 GET 做重试，避免 POST/PUT 这类有副作用的请求被重复提交。
         if (properties.getRoutes().isRetryEnabled()) {
             filter.retry(config -> config
                     .setRetries(properties.getRoutes().getRetryCount())
@@ -113,6 +120,7 @@ public class GatewayRouteConfig {
     }
 
     private GatewayFilterSpec sseFilters(GatewayFilterSpec filter) {
+        // SSE 流式接口不能叠加重试、响应体改写等策略，否则容易打断流式输出。
         return filter.dedupeResponseHeader(
                 "Access-Control-Allow-Credentials Access-Control-Allow-Origin",
                 DedupeResponseHeaderGatewayFilterFactory.Strategy.RETAIN_UNIQUE.name()
@@ -120,7 +128,7 @@ public class GatewayRouteConfig {
     }
 
     private GatewayFilterSpec passthroughFilters(GatewayFilterSpec filter) {
-        // 直通场景只保留必要的响应头去重，不叠加任何保护性策略。
+        // 直通路由只做必要响应头去重，不附加熔断和重试。
         return filter.dedupeResponseHeader(
                 "Access-Control-Allow-Credentials Access-Control-Allow-Origin",
                 DedupeResponseHeaderGatewayFilterFactory.Strategy.RETAIN_UNIQUE.name()

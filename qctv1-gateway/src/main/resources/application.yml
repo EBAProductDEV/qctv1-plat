@@ -6,16 +6,15 @@ spring:
     name: qctv1-gateway
   main:
     web-application-type: reactive
+  profiles:
+    # 默认 local，方便本机按固定端口调试；启用 Nacos 时显式传 --spring.profiles.active=nacos。
+    default: nacos
   data:
     redis:
       host: ${QCTV1_REDIS_HOST:localhost}
       port: ${QCTV1_REDIS_PORT:6379}
       password: ${QCTV1_REDIS_PASSWORD:}
       database: ${QCTV1_REDIS_DATABASE:0}
-  profiles:
-    # 默认走 nacos 模式，便于本地和联调环境统一使用注册发现。
-    # 如需本机直连调试，可显式切回 local profile。
-    default: nacos
   cloud:
     gateway:
       server:
@@ -53,6 +52,9 @@ resilience4j:
       agent-api:
         sliding-window-size: 20
         failure-rate-threshold: 50
+      drama-api:
+        sliding-window-size: 20
+        failure-rate-threshold: 50
       code-api:
         sliding-window-size: 20
         failure-rate-threshold: 50
@@ -70,6 +72,9 @@ resilience4j:
       agent-api:
         timeout-duration: 180s
         cancel-running-future: true
+      drama-api:
+        timeout-duration: 180s
+        cancel-running-future: true
       code-api:
         timeout-duration: 180s
         cancel-running-future: true
@@ -77,10 +82,10 @@ resilience4j:
 qctv1:
   gateway:
     routes:
-      # 默认按服务名走 Nacos 注册发现。
-      # local 模式会在 application-local.yml 中覆盖成固定 HTTP 地址。
+      # 默认按服务名走 Nacos 注册发现；local profile 会覆盖为固定 HTTP 地址。
       chat-uri: lb://qctv1-ai-chat
       rag-uri: lb://qctv1-ai-rag
+      drama-uri: lb://qctv1-ai-drama
       iam-uri: lb://qctv1-iam
       connect-timeout-ms: 10000
       response-timeout-ms: 180000
@@ -98,6 +103,7 @@ qctv1:
         - /api/iam/auth/refresh
         - /api/ai/chat/stream
         - /api/ai/agent/chat
+        - /api/ai/drama/assets/**
     cors:
       allowed-origin-patterns:
         - http://localhost:*

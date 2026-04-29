@@ -33,6 +33,8 @@ public class Qctv1GatewayProperties {
 
         private URI ragUri = URI.create("lb://qctv1-ai-rag");
 
+        private URI dramaUri = URI.create("lb://qctv1-ai-drama");
+
         private URI iamUri = URI.create("lb://qctv1-iam");
 
         private int connectTimeoutMs = 10_000;
@@ -59,6 +61,14 @@ public class Qctv1GatewayProperties {
 
         public void setRagUri(URI ragUri) {
             this.ragUri = ragUri;
+        }
+
+        public URI getDramaUri() {
+            return dramaUri;
+        }
+
+        public void setDramaUri(URI dramaUri) {
+            this.dramaUri = dramaUri;
         }
 
         public URI getIamUri() {
@@ -120,7 +130,8 @@ public class Qctv1GatewayProperties {
                 "/api/iam/auth/register",
                 "/api/iam/auth/refresh",
                 "/api/ai/chat/stream",
-                "/api/ai/agent/chat"
+                "/api/ai/agent/chat",
+                "/api/ai/drama/assets/**"
         ));
 
         private String jwtSecret = "Qctv1JwtSecretKeyForDevOnlyPleaseChange1234567890";
@@ -218,3 +229,4 @@ public class Qctv1GatewayProperties {
         }
     }
 }
+

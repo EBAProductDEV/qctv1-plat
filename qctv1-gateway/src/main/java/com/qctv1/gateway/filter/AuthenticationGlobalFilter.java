@@ -11,6 +11,7 @@ import org.springframework.cloud.gateway.filter.GlobalFilter;
 import org.springframework.core.Ordered;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
+import org.springframework.http.server.reactive.ServerHttpRequest;
 import org.springframework.http.server.reactive.ServerHttpResponse;
 import org.springframework.stereotype.Component;
 import org.springframework.util.AntPathMatcher;
@@ -64,14 +65,9 @@ public class AuthenticationGlobalFilter implements GlobalFilter, Ordered {
             return chain.filter(exchange);
         }
 
-        String authorization = exchange.getRequest().getHeaders().getFirst("Authorization");
-        if (!StringUtils.hasText(authorization)) {
-            return writeJsonError(exchange, HttpStatus.UNAUTHORIZED, "Missing Authorization header");
-        }
-
-        String token = normalizeToken(authorization);
+        String token = resolveToken(exchange.getRequest());
         if (!StringUtils.hasText(token)) {
-            return writeJsonError(exchange, HttpStatus.UNAUTHORIZED, "Authorization header is empty");
+            return writeJsonError(exchange, HttpStatus.UNAUTHORIZED, "Missing authorization token");
         }
 
         // validate 通过后把用户标识写入请求头，后端服务不再自行解析 JWT。
@@ -96,6 +92,26 @@ public class AuthenticationGlobalFilter implements GlobalFilter, Ordered {
             return authorization.substring(7).trim();
         }
         return authorization.trim();
+    }
+
+    private String resolveToken(ServerHttpRequest request) {
+        String authorization = request.getHeaders().getFirst("Authorization");
+        if (StringUtils.hasText(authorization)) {
+            return normalizeToken(authorization);
+        }
+        // 浏览器原生 WebSocket 无法自定义 Authorization 请求头。
+        // 任务中心这类 WebSocket 握手会把 token 放在 query 参数里，由网关统一校验后再转发。
+        if (isWebSocketRequest(request)) {
+            return request.getQueryParams().getFirst("token");
+        }
+        return null;
+    }
+
+    private boolean isWebSocketRequest(ServerHttpRequest request) {
+        String upgrade = request.getHeaders().getUpgrade();
+        String connection = request.getHeaders().getFirst("Connection");
+        return "websocket".equalsIgnoreCase(upgrade)
+                || (connection != null && connection.toLowerCase().contains("upgrade"));
     }
 
     private Mono<Void> writeJsonError(ServerWebExchange exchange, HttpStatus status, String message) {

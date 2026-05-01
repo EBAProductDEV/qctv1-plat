@@ -17,11 +17,16 @@ spring:
       database: ${QCTV1_REDIS_DATABASE:0}
   cloud:
     gateway:
+      httpclient:
+        wiretap: false
+      httpserver:
+        wiretap: false
       server:
         webflux:
           httpclient:
             connect-timeout: 10000
-            response-timeout: 180s
+            response-timeout: 300s
+            wiretap: false
           discovery:
             locator:
               enabled: false
@@ -35,7 +40,22 @@ management:
   endpoints:
     web:
       exposure:
-        include: health,info,metrics,gateway
+        include: health,info,metrics,gateway,loggers
+
+logging:
+  level:
+    root: INFO
+    com.qctv1.gateway: INFO
+    org.springframework.cloud.gateway: WARN
+    org.springframework.cloud.gateway.handler.RoutePredicateHandlerMapping: WARN
+    org.springframework.cloud.gateway.filter: WARN
+    org.springframework.cloud.loadbalancer: WARN
+    org.springframework.web.reactive: WARN
+    reactor.netty: WARN
+    reactor.netty.http.client: WARN
+    reactor.netty.http.server: WARN
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss.SSS} %-5level [%thread] %logger{80} - %msg%n"
 
 resilience4j:
   circuitbreaker:
@@ -73,7 +93,7 @@ resilience4j:
         timeout-duration: 180s
         cancel-running-future: true
       drama-api:
-        timeout-duration: 180s
+        timeout-duration: 300s
         cancel-running-future: true
       code-api:
         timeout-duration: 180s
@@ -88,7 +108,7 @@ qctv1:
       drama-uri: lb://qctv1-ai-drama
       iam-uri: lb://qctv1-iam
       connect-timeout-ms: 10000
-      response-timeout-ms: 180000
+      response-timeout-ms: 300000
       retry-enabled: true
       retry-count: 2
       circuit-breaker-enabled: true

@@ -57,6 +57,12 @@ public class GatewayRouteConfig {
                         .metadata(RouteMetadataUtils.CONNECT_TIMEOUT_ATTR, properties.getRoutes().getConnectTimeoutMs())
                         .metadata(RouteMetadataUtils.RESPONSE_TIMEOUT_ATTR, properties.getRoutes().getResponseTimeoutMs())
                         .uri(properties.getRoutes().getChatUri().toString()))
+                .route("ai-drama-task-ws", route -> route
+                        .path("/api/ai/drama/ws/tasks")
+                        .filters(filter -> passthroughFilters(filter)
+                                .rewritePath("/api/ai/drama/?(?<segment>.*)", "/drama/${segment}"))
+                        .metadata(RouteMetadataUtils.CONNECT_TIMEOUT_ATTR, properties.getRoutes().getConnectTimeoutMs())
+                        .uri(toWebSocketUri(properties.getRoutes().getDramaUri().toString())))
                 .route("ai-drama-api", route -> route
                         .path("/api/ai/drama/**")
                         .filters(filter -> standardFilters(filter, properties, "drama-api")
@@ -133,5 +139,18 @@ public class GatewayRouteConfig {
                 "Access-Control-Allow-Credentials Access-Control-Allow-Origin",
                 DedupeResponseHeaderGatewayFilterFactory.Strategy.RETAIN_UNIQUE.name()
         );
+    }
+
+    private String toWebSocketUri(String uri) {
+        if (uri.startsWith("lb://")) {
+            return "lb:ws://" + uri.substring("lb://".length());
+        }
+        if (uri.startsWith("http://")) {
+            return "ws://" + uri.substring("http://".length());
+        }
+        if (uri.startsWith("https://")) {
+            return "wss://" + uri.substring("https://".length());
+        }
+        return uri;
     }
 }

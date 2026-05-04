@@ -15,7 +15,7 @@ public class IamProperties {
     public static class Jwt {
         private String issuer;
         private String secret;
-        private long accessExpireMinutes = 30;
-        private long refreshExpireDays = 7;
+        private long accessExpireMinutes = 720;
+        private long refreshExpireDays = 30;
     }
 }

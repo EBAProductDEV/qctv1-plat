@@ -41,5 +41,5 @@ qctv1:
     jwt:
       issuer: qctv1-iam
       secret: ${QCTV1_JWT_SECRET:Qctv1JwtSecretKeyForDevOnlyPleaseChange1234567890}
-      access-expire-minutes: 30
-      refresh-expire-days: 7
+      access-expire-minutes: ${QCTV1_JWT_ACCESS_EXPIRE_MINUTES:720}
+      refresh-expire-days: ${QCTV1_JWT_REFRESH_EXPIRE_DAYS:30}

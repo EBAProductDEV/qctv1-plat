@@ -10,6 +10,7 @@ import com.qctv1.iam.auth.vo.RouteItemVo;
 import com.qctv1.iam.auth.vo.RouteMetaVo;
 import com.qctv1.iam.auth.vo.UserProfileVo;
 import com.qctv1.iam.common.BusinessException;
+import com.qctv1.iam.config.IamProperties;
 import com.qctv1.iam.user.entity.BaseUser;
 import com.qctv1.iam.user.mapper.BaseUserMapper;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
@@ -35,15 +36,18 @@ public class AuthService {
     private final BCryptPasswordEncoder passwordEncoder = new BCryptPasswordEncoder();
     private final JwtTokenService jwtTokenService;
     private final RedisSessionService redisSessionService;
+    private final IamProperties iamProperties;
 
     public AuthService(
             BaseUserMapper baseUserMapper,
             JwtTokenService jwtTokenService,
-            RedisSessionService redisSessionService
+            RedisSessionService redisSessionService,
+            IamProperties iamProperties
     ) {
         this.baseUserMapper = baseUserMapper;
         this.jwtTokenService = jwtTokenService;
         this.redisSessionService = redisSessionService;
+        this.iamProperties = iamProperties;
     }
 
     @Transactional
@@ -198,8 +202,8 @@ public class AuthService {
         redisSessionService.saveSession(
                 userId,
                 tokenPair.sessionId(),
-                Duration.ofMinutes(30),
-                Duration.ofDays(7)
+                Duration.ofMinutes(iamProperties.getJwt().getAccessExpireMinutes()),
+                Duration.ofDays(iamProperties.getJwt().getRefreshExpireDays())
         );
     }
 

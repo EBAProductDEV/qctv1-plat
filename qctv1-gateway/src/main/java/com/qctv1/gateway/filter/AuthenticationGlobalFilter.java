@@ -99,12 +99,24 @@ public class AuthenticationGlobalFilter implements GlobalFilter, Ordered {
         if (StringUtils.hasText(authorization)) {
             return normalizeToken(authorization);
         }
-        // 浏览器原生 WebSocket 无法自定义 Authorization 请求头。
-        // 任务中心这类 WebSocket 握手会把 token 放在 query 参数里，由网关统一校验后再转发。
-        if (isWebSocketRequest(request)) {
-            return request.getQueryParams().getFirst("token");
+        // 浏览器原生 WebSocket 和 <video>/<a> 这类原生请求无法自定义 Authorization 请求头。
+        // 只允许这些明确的文件/WS 场景从 query 参数取 token，避免普通接口养成把 token 放 URL 的习惯。
+        if (acceptsQueryToken(request)) {
+            String queryToken = request.getQueryParams().getFirst("token");
+            if (StringUtils.hasText(queryToken)) {
+                return normalizeToken(queryToken);
+            }
         }
         return null;
+    }
+
+    private boolean acceptsQueryToken(ServerHttpRequest request) {
+        if (isWebSocketRequest(request)) {
+            return true;
+        }
+        String path = request.getPath().value();
+        return pathMatcher.match("/api/ai/drama/jianying/packages/*/reference", path)
+                || pathMatcher.match("/api/ai/drama/jianying/packages/*/download", path);
     }
 
     private boolean isWebSocketRequest(ServerHttpRequest request) {
